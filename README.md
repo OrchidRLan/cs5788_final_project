@@ -94,6 +94,7 @@ intended as input to a downstream VRM reconstruction and auto-rigging
 pipeline.
 
 ## 3 Repository structure 
+```bash
 cs5788_final_project/
 │
 ├── README.md
@@ -147,7 +148,7 @@ postprocess/ — 3D 重建与绑骨脚本
 evaluation/ — 身份/风格/结构评估脚本
 frontend/ — FastAPI 后端、静态资源、HTML 模板
 
-
+```
 ## 4 Setup Instructions
 ### Prerequisites
 - WSL2 (Ubuntu 20.04+) or Linux
