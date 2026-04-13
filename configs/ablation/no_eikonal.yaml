@@ -1,0 +1,6 @@
+defaults:
+  - ../default
+
+loss:
+  lambda_normal: 0.1
+  lambda_eikonal: 0.0
