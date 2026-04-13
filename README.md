@@ -301,11 +301,61 @@ data/class_images/
 ├── ...
 └── generic_150.png      # 100–200 images, diverse styles and content
 ```
-7. Model weights (note that checkpoints/ is gitignored, provide HuggingFace 
+## 7 Model weights (note that checkpoints/ is gitignored, provide HuggingFace 
    links placeholder)
-8. Team
+
+   ```markdown
+
+### Base Models (Auto-downloaded from HuggingFace)
+
+The following pretrained models are required and will be downloaded 
+automatically on first run. To pre-download manually, see Setup Instructions.
+
+| Model | HuggingFace Link | Used In |
+|-------|-----------------|---------|
+| Stable Diffusion 1.5 | [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5) | All training modules + inference |
+| IP-Adapter FaceID | [h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID) | Inference: identity conditioning |
+| ControlNet OpenPose | [lllyasviel/control_v11p_sd15_openpose](https://huggingface.co/lllyasviel/control_v11p_sd15_openpose) | Inference: structure conditioning |
+| ArcFace (InsightFace) | [deepinsight/insightface](https://huggingface.co/deepinsight/insightface) | Module 3 training + evaluation |
+
+---
+
+### Trained Checkpoints (gitignored)
+
+Checkpoints produced by our three training modules are stored in 
+`checkpoints/` and are not tracked by git.
+
+```
+checkpoints/
+├── sd15/                      # Base model cache
+├── ip_adapter/                # IP-Adapter FaceID weights
+├── controlnet/                # ControlNet OpenPose weights
+├── arcface/                   # ArcFace weights
+│
+├── style_token.pt             # Output of Module 1 (Textual Inversion)
+├── style_lora.safetensors     # Output of Module 2 (DreamBooth + LoRA)
+└── style_id_lora.safetensors  # Output of Module 3 (Identity-Guided Fine-tuning)
+```
+
+To reproduce our results, run the three training modules in order:
+
+```bash
+# Module 1 and 2 can run in parallel
+python training/textual_inversion.py    # → style_token.pt
+python training/dreambooth_lora.py      # → style_lora.safetensors
+
+# Module 3 depends on Module 2 output
+python training/identity_loss.py        # → style_id_lora.safetensors
+```
+
+> **Note:** Pre-trained checkpoints for our Laukry-style demo will be 
+> released on HuggingFace after the course concludes.  
+> 🔗 Link: `[to be released]`
+```
+
+## 8 Team
    - A: Identity Loss module + Evaluation pipeline
    - B: Textual Inversion training
    - C: DreamBooth + LoRA training
-9. References (4 papers: SD1.5, Textual Inversion, DreamBooth, ControlNet, 
+## 9 References (4 papers: SD1.5, Textual Inversion, DreamBooth, ControlNet, 
    IP-Adapter, ArcFace)
