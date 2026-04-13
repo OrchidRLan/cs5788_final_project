@@ -25,8 +25,10 @@ README should include these sections:
     The generated 2D avatar is designed as the front-end of a downstream 3D 
     pipeline, with output structured to support VRM avatar reconstruction 
     and auto-rigging.
-
-    公司（一次性配置）                    用户（每次使用）
+ 
+类似toB产品：
+```bash
+公司（一次性配置）                    用户（每次使用）
 ─────────────────                   ─────────────────
 提供：                               提供：
 - 品牌画风训练数据                    - 一张自己的照片
@@ -44,6 +46,7 @@ README should include these sections:
                             ↓ 后接 pipeline
                             
                             VRM 3D avatar
+```
 
 ## 2 Method overview (briefly explain the 3 training modules and inference pipeline)
 Our pipeline is designed for two roles: a **designer** who configures the 
