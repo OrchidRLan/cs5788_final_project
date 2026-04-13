@@ -1,66 +1,72 @@
-# CS5788: CircleMic Style 3D Generation via TripoSG Finetuning
+Description: Given a single portrait photo of any person, generate a 
+chibi-style avatar image that preserves the person's facial identity, with 
+user-selectable body templates.
 
-**Jian-Peng Li · Jiangxiang Ling · Ruolan Chen** | Cornell CS5788 Spring 2026
+Tech stack:
+- Base model: Stable Diffusion 1.5
+- Training: Textual Inversion, DreamBooth + LoRA, Identity Loss (ArcFace)
+- Inference: IP-Adapter FaceID, ControlNet (pose)
+- Backend: FastAPI
+- Frontend: HTML/CSS/JS (single page)
 
-## Overview
-We finetune TripoSG on a CircleMic-style chibi character dataset to improve 
-3D reconstruction fidelity for stylized cartoon inputs.
+Repository structure:
+cs5788_final_project/
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   ├── class_images/
+│   └── template/
+│       ├── previews/
+│       └── poses/
+├── training/
+│   ├── textual_inversion.py
+│   ├── dreambooth_lora.py
+│   ├── identity_loss.py
+│   └── train_config.yaml
+├── checkpoints/
+├── inference/
+│   ├── pipeline.py
+│   ├── face_extractor.py
+│   └── controlnet_utils.py
+├── postprocess/
+│   ├── reconstruct_3d.py
+│   └── rigging.py
+├── evaluation/
+│   ├── eval_identity.py
+│   ├── eval_style.py
+│   └── eval_structure.py
+└── frontend/
+    ├── app.py
+    ├── static/
+    └── templates/
+        └── index.html
 
-**Pipeline:**
-```
-MidJourney 2D image → Zero123++ multiview → TripoSG (finetuned) → 3D mesh
-```
+data/ — 原始图、处理后图、class images、模板预览和姿态
+training/ — 三个训练脚本 + 配置文件
+checkpoints/ — 模型权重存放目录
+inference/ — 推理 pipeline 及工具脚本
+postprocess/ — 3D 重建与绑骨脚本
+evaluation/ — 身份/风格/结构评估脚本
+frontend/ — FastAPI 后端、静态资源、HTML 模板
 
-## Setup
-```bash
-conda create -n triposg_chibi python=3.10
-conda activate triposg_chibi
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip install torch-cluster -f https://data.pyg.org/whl/torch-2.1.0+cu121.html
-pip install -r requirements.txt
-git clone https://github.com/VAST-AI-Research/TripoSG.git
-pip install -e TripoSG/
-```
-
-## Data Preparation
-```bash
-# 1. Blender render (run inside Blender scripting panel)
-python data/scripts/blender_render.py
-
-# 2. Zero123++ multiview generation
-python data/scripts/zero123pp_infer.py --input_dir data/mj_images/ --output_dir data/zero123_out/
-
-# 3. Compute GT SDF
-python data/scripts/compute_sdf.py --mesh_path data/laukry.glb --output data/cache/laukry_sdf.npy
-
-# 4. Build dataset
-python data/scripts/build_dataset.py
-```
-
-## Training
-```bash
-python scripts/train.py --config configs/default.yaml
-```
-
-## Evaluation
-```bash
-python scripts/evaluate.py --checkpoint checkpoints/best.pt --test_dir data/test/
-```
-
-## Demo
-```bash
-python demo/app.py
-```
-
-## Results
-*To be filled after experiments*
-
-## Citation
-```bibtex
-@article{li2025triposg,
-  title={TripoSG: High-Fidelity 3D Shape Synthesis using Large-Scale Rectified Flow Models},
-  author={Li, Yangguang and others},
-  journal={arXiv preprint arXiv:2502.06608},
-  year={2025}
-}
-```
+README should include these sections:
+1. Project overview (2-3 sentences, what it does and why)
+2. Method overview (briefly explain the 3 training modules and inference pipeline)
+3. Repository structure (the folder tree above, with one-line explanation per folder)
+4. Setup instructions (conda env, pip install requirements.txt, download base models)
+5. Usage
+   - Training (run order: dreambooth_lora.py first, then identity_loss.py, 
+     textual_inversion.py can run in parallel)
+   - Inference (python inference/pipeline.py --photo your_photo.jpg --template female_casual)
+   - Evaluation (python evaluation/eval_identity.py)
+   - Frontend (uvicorn frontend/app.py)
+6. Training data (describe that we use 80 chibi-style images of one character, 
+   plus MidJourney-generated diverse chibi images)
+7. Model weights (note that checkpoints/ is gitignored, provide HuggingFace 
+   links placeholder)
+8. Team
+   - A: Identity Loss module + Evaluation pipeline
+   - B: Textual Inversion training
+   - C: DreamBooth + LoRA training
+9. References (4 papers: SD1.5, Textual Inversion, DreamBooth, ControlNet, 
+   IP-Adapter, ArcFace)
