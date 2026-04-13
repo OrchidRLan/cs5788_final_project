@@ -1,361 +1,480 @@
+# [ICLR 2025] DiffSplat
 
-Tech stack:
-- Base model: Stable Diffusion 1.5
-- Training: Textual Inversion, DreamBooth + LoRA, Identity Loss (ArcFace)
-- Inference: IP-Adapter FaceID, ControlNet (pose)
-- Backend: FastAPI
-- Frontend: HTML/CSS/JS (single page)
+<h4 align="center">
+
+DiffSplat: Repurposing Image Diffusion Models for Scalable Gaussian Splat Generation
+
+[Chenguo Lin](https://chenguolin.github.io), [Panwang Pan](https://paulpanwang.github.io), [Bangbang Yang](https://ybbbbt.com), [Zeming Li](https://www.zemingli.com), [Yadong Mu](http://www.muyadong.com)
+
+[![arXiv](https://img.shields.io/badge/arXiv-2501.16764-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2501.16764)
+[![Project page](https://img.shields.io/badge/Project-Page-brightgreen)](https://chenguolin.github.io/projects/DiffSplat)
+[![Model](https://img.shields.io/badge/HF-Model-yellow)](https://huggingface.co/chenguolin/DiffSplat)
 
 
-README should include these sections:
-## 1 Project overview 
-    We present a style-agnostic avatar generation framework designed for 
-    brand-consistent character creation. Given a company-defined illustration 
-    style (provided as a curated image dataset) and a user-uploaded portrait 
-    photo, our system generates a 2D avatar image that simultaneously preserves 
-    the user's facial identity and conforms to the brand's visual style and 
-    canonical body structure.
+<p>
+    <img width="144" src="./assets/_demo/1.gif">
+    <img width="144" src="./assets/_demo/2.gif">
+    <img width="144" src="./assets/_demo/3.gif">
+    <img width="144" src="./assets/_demo/4.gif">
+    <img width="144" src="./assets/_demo/5.gif">
+</p>
+<p>
+    <img width="144" src="./assets/_demo/6.gif">
+    <img width="144" src="./assets/_demo/7.gif">
+    <img width="144" src="./assets/_demo/8.gif">
+    <img width="144" src="./assets/_demo/9.gif">
+    <img width="144" src="./assets/_demo/10.gif">
+</p>
+<p>
+    <img width="730", src="./assets/_demo/overview.png">
+</p>
 
-    The framework is designed with two distinct roles in mind: a designer role, 
-    which configures the target style by supplying training images and body 
-    template poses, and an end-user role, which simply uploads a photo and 
-    selects a template. Once trained, the model generalizes to any new user 
-    without retraining.
+</h4>
 
-    The generated 2D avatar is designed as the front-end of a downstream 3D 
-    pipeline, with output structured to support VRM avatar reconstruction 
-    and auto-rigging.
- 
-类似toB产品：
+This repository contains the official implementation of the paper: [DiffSplat: Repurposing Image Diffusion Models for Scalable Gaussian Splat Generation](https://arxiv.org/abs/2501.16764), which is accepted to ICLR 2025.
+DiffSplat is a generative framework to synthesize 3D Gaussian Splats from text prompts & single-view images in 1~2 seconds. It is fine-tuned directly from a pretrained text-to-image diffusion model.
+
+Feel free to contact me (chenguolin@stu.pku.edu.cn) or open an issue if you have any questions or suggestions.
+
+
+## 🔥 See Also
+
+You may also be interested in our other works:
+- [**[CVPR 2026] Diff4Splat**](https://github.com/paulpanwang/Diff4Splat): a generative model for 4D dynamic scenes from a single-view image.
+- [**[CVPR 2026] MoVieS**](https://github.com/chenguolin/MoVieS): a feed-forward model for 4D dynamic reconstruction from monocular videos.
+- [**[NeurIPS 2025] PartCrafter**](https://github.com/wgsxm/PartCrafter): a 3D-native DiT that can directly generate 3D objects in multiple parts.
+
+
+## 📢 News
+
+- **2025-03-06**: Training instructions for DiffSplat and ControlNet are provided.
+- **2025-02-11**: Training instructions for GSRecon and GSVAE are provided.
+- **2025-02-02**: Inference instructions (text-conditioned & image-conditioned & controlnet) are provided.
+- **2025-01-29**: The source code and pretrained models are released. Happy 🐍 Chinese New Year 🎆!
+- **2025-01-22**: DiffSplat is accepted to ICLR 2025.
+
+
+## 📋 TODO
+
+- [x] Provide detailed instructions for inference.
+- [x] Provide detailed instructions for GSRecon & GSVAE training.
+- [x] Provide detailed instructions for DiffSplat training.
+
+
+## 🔧 Installation
+
+You may need to modify the specific version of `torch` in `settings/setup.sh` according to your CUDA version.
+There are not restrictions on the `torch` version, feel free to use your preferred one.
 ```bash
-公司（一次性配置）                    用户（每次使用）
-─────────────────                   ─────────────────
-提供：                               提供：
-- 品牌画风训练数据                    - 一张自己的照片
-- 身体 template 图（多套）            - 选择 template 款式
-
-         ↓ 训练（你们的三块代码）
-         
-         模型学会"这家公司的画风"
-         
-                  ↓ 推理
-                  
-                  生成：这个用户脸的
-                        公司画风 avatar 2D图
-                        
-                            ↓ 后接 pipeline
-                            
-                            VRM 3D avatar
+git clone https://github.com/chenguolin/DiffSplat.git
+cd DiffSplat
+bash settings/setup.sh
 ```
 
-## 2 Method overview (briefly explain the 3 training modules and inference pipeline)
-Our pipeline is designed for two roles: a **designer** who configures the 
-target style once, and an **end-user** who uploads a portrait photo at 
-inference time. The framework consists of three training modules and a 
-multi-conditioned inference stage.
 
-**Module 1 — Textual Inversion** (A)  
-We optimize a single learnable token embedding `<style>` within SD1.5's 
-text encoder, keeping all model weights frozen. Training runs on the 
-designer-provided style image dataset using standard denoising loss. 
-The result is a new "word" that encodes the brand's visual style and 
-can be used in any prompt.
+## 📊 Dataset
 
-**Module 2 — DreamBooth + LoRA** (B)  
-We fine-tune lightweight LoRA adapters (rank 4, applied to UNet attention 
-layers) using a subject loss on the style dataset and a prior preservation 
-loss on generic anime/illustration images to prevent catastrophic forgetting. 
-This produces a stronger style representation than Module 1 by directly 
-updating model weights, and serves as the base checkpoint for Module 3.
+- We use [G-Objaverse](https://github.com/modelscope/richdreamer/tree/main/dataset/gobjaverse) with about 265K 3D objects and 10.6M rendered images (265K x 40 views, including RGB, normal and depth maps) for `GSRecon` and `GSVAE` training. [Its subset](https://github.com/ashawkey/objaverse_filter) with about 83K 3D objects provided by [LGM](https://me.kiui.moe/lgm) is used for `DiffSplat` training. Their text descriptions are provided by the latest version of [Cap3D](https://huggingface.co/datasets/tiange/Cap3D) (i.e., refined by [DiffuRank](https://arxiv.org/abs/2404.07984)).
+- We find the filtering is crucial for the generation quality of `DiffSplat`, and a larger dataset is beneficial for the performance of `GSRecon` and `GSVAE`.
+- We store the dataset in an internal HDFS cluster in this project. Thus, the training code can NOT be directly run on your local machine. Please implement your own dataloading logic referring to our provided dataset & dataloader code.
 
-**Module 3 — Identity-Guided Fine-tuning** (C)  
-Building on Module 2's LoRA checkpoint, we introduce an additional 
-identity loss:
 
-$$L_{id} = 1 - \cos(f(x_{gen}),\ f(x_{input}))$$
+## 🚀 Usage
 
-where $f$ is a frozen ArcFace model. This encourages the model to generate 
-faces that structurally resemble a given input portrait, bridging brand-style 
-transfer and per-user identity preservation.
+### 📷 Camera Conventions
 
-**Inference Pipeline**  
-At inference time, the end-user uploads a single portrait photo. Three 
-conditioning signals are applied simultaneously to SD1.5:
-- **Style**: Module 2/3 LoRA weights encoding the designer-defined visual style
-- **Identity**: IP-Adapter FaceID injects the user's ArcFace face embedding 
-  into cross-attention layers
-- **Structure**: ControlNet conditioned on an OpenPose skeleton extracted 
-  from the designer-provided body template (selectable by the end-user 
-  at runtime)
+The camera and world coordinate systems in this project are both defined in the `OpenGL` convention, i.e., X: right, Y: up, Z: backward. The camera is located at `(0, 0, 1.4)` in the world coordinate system, and the camera looks at the origin `(0, 0, 0)`.
+Please refer to [kiuikit camera doc](https://kit.kiui.moe/camera) for visualizations of the camera and world coordinate systems.
 
-The three conditioning scales (α, β, γ) are tunable at inference time.
-The output is a fully generated 2D avatar image — not a composite — 
-intended as input to a downstream VRM reconstruction and auto-rigging 
-pipeline.
+### 🤗 Pretrained Models
 
-## 3 Repository structure 
-```bash
-cs5788_final_project/
-│
-├── README.md
-├── requirements.txt
-├── .gitignore                         # checkpoints/, data/raw/
-│
-├── data/
-│   ├── raw/                           # Designer-provided style images (gitignored)
-│   ├── processed/                     # Preprocessed images (512x512, captioned)
-│   ├── class_images/                  # Prior preservation images (generic illustrations)
-│   └── template/
-│       ├── previews/                  # Template thumbnails shown to end-user in UI
-│       └── poses/                     # Pre-extracted OpenPose skeletons for ControlNet
-│
-├── training/
-│   ├── textual_inversion.py           # Module 1: learns <style> token embedding
-│   ├── dreambooth_lora.py             # Module 2: LoRA fine-tuning with prior preservation
-│   ├── identity_loss.py               # Module 3: identity-guided fine-tuning (ArcFace)
-│   └── train_config.yaml             # Shared hyperparameters for all training modules
-│
-├── checkpoints/                       # Training outputs (gitignored)
-│   ├── style_token.pt                 # Module 1 output
-│   ├── style_lora.safetensors         # Module 2 output
-│   └── style_id_lora.safetensors      # Module 3 output
-│
-├── inference/
-│   ├── pipeline.py                    # Joint inference: LoRA + FaceID + ControlNet
-│   ├── face_extractor.py              # ArcFace embedding extraction from user photo
-│   └── controlnet_utils.py           # Template loading and OpenPose preprocessing
-│
-├── postprocess/                       # Downstream pipeline (optional for course demo)
-│   ├── reconstruct_3d.py              # 2D avatar → 3D mesh (CharacterGen)
-│   └── rigging.py                     # 3D mesh → VRM (UniRig)
-│
-├── evaluation/
-│   ├── eval_identity.py               # ArcFace cosine similarity
-│   ├── eval_style.py                  # CLIP score vs style prompt
-│   └── eval_structure.py             # OpenPose keypoint error vs template
-│
-└── frontend/
-    ├── app.py                         # FastAPI backend
-    ├── static/
-    └── templates/
-        └── index.html                 # Single-page UI: upload → select → generate → download
+All pretrained models are available at [HuggingFace🤗](https://huggingface.co/chenguolin/DiffSplat).
 
-data/ — 原始图、处理后图、class images、模板预览和姿态
-training/ — 三个训练脚本 + 配置文件
-checkpoints/ — 模型权重存放目录
-inference/ — 推理 pipeline 及工具脚本
-postprocess/ — 3D 重建与绑骨脚本
-evaluation/ — 身份/风格/结构评估脚本
-frontend/ — FastAPI 后端、静态资源、HTML 模板
+| **Model Name**                | **Fine-tined From** | **#Param.** | **Link** | **Note** |
+|-------------------------------|---------------------|-------------|----------|----------|
+| **GSRecon**                   | From scratch                    | 42M            | [gsrecon_gobj265k_cnp_even4](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsrecon_gobj265k_cnp_even4)         | Feed-forward reconstruct per-pixel 3DGS from 4-view (RGB, normal, coordinate) maps         |
+| **GSVAE (SD)**                | [SD1.5 VAE](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5)                    | 84M            | [gsvae_gobj265k_sd](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsvae_gobj265k_sd)         |          |
+| **GSVAE (SDXL)**              | [SDXL fp16 VAE](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix)                    | 84M            | [gsvae_gobj265k_sdxl_fp16](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsvae_gobj265k_sdxl_fp16)         | fp16-fixed SDXL VAE is more robust         |
+| **GSVAE (SD3)**               | [SD3 VAE](https://huggingface.co/stabilityai/stable-diffusion-3-medium)                    | 84M            | [gsvae_gobj265k_sd3](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsvae_gobj265k_sd3)         |          |
+| **DiffSplat (SD1.5)**            | [SD1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5)                    | 0.86B            | Text-cond: [gsdiff_gobj83k_sd15__render](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd15__render)<br> Image-cond: [gsdiff_gobj83k_sd15_image__render](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd15_image__render)         | Best efficiency         |
+| **DiffSplat (PixArt-Sigma)** | [PixArt-Sigma](https://huggingface.co/PixArt-alpha/PixArt-Sigma-XL-2-512-MS)                    | 0.61B            | Text-cond: [gsdiff_gobj83k_pas_fp16__render](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_pas_fp16__render)<br> Image-cond: [gsdiff_gobj83k_pas_fp16_image__render](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_pas_fp16_image__render)         | Best Trade-off         |
+| **DiffSplat (SD3.5m)**         | [SD3.5 median](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)                    | 2.24B            | Text-cond: [gsdiff_gobj83k_sd35m__render](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd35m__render)<br> Image-cond: [gsdiff_gobj83k_sd35m_image__render](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd35m_image__render)         | Best performance        |
+| **DiffSplat ControlNet (SD1.5)**         | From scratch                    | 361M            | Depth: [gsdiff_gobj83k_sd15__render__depth](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd15__render__depth)<br> Normal: [gsdiff_gobj83k_sd15__render__normal](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd15__render__normal)<br> Canny: [gsdiff_gobj83k_sd15__render__canny](https://huggingface.co/chenguolin/DiffSplat/tree/main/gsdiff_gobj83k_sd15__render__canny)         |          |
+| **(Optional) ElevEst**                   | [dinov2_vitb14_reg](https://github.com/facebookresearch/dinov2)                    | 86 M            | [elevest_gobj265k_b_C25](https://huggingface.co/chenguolin/DiffSplat/tree/main/elevest_gobj265k_b_C25)         | (Optional) Single-view image elevation estimation        |
 
-```
-## 4 Setup Instructions
-### Prerequisites
-- WSL2 (Ubuntu 20.04+) or Linux
-- CUDA 12.4+
-- conda
 
----
+### ⚡ Inference
 
-### 1. Clone the Repository
+#### 0. Download Pretrained Models
+
+Note that:
+- Pretrained weights will download from HuggingFace and stored in `./out`.
+- Other pretrained models (such as CLIP, T5, image VAE, etc.) will be downloaded automatically and stored in your HuggingFace cache directory.
+- If you face problems in visiting HuggingFace Hub, you can try to set the environment variable `export HF_ENDPOINT=https://hf-mirror.com`.
+- `GSRecon` pretrained weights is NOT really used during inference. Only its rendering function is used for visualization.
 
 ```bash
-git clone https://github.com/OrchidRLan/cs5788_final_project.git
-cd cs5788_final_project
+python3 download_ckpt.py --model_type [MODEL_TYPE] [--image_cond]
+
+# `MODEL_TYPE`: choose from "sd15", "pas", "sd35m", "depth", "normal", "canny", "elevest"
+# `--image_cond`: add this flag for downloading image-conditioned models
 ```
 
-### 2. Create Conda Environment
+For example, to download the `text-cond SD1.5-based DiffSplat`:
+```bash
+python3 download_ckpt.py --model_type sd15
+```
+To download the `image-cond PixArt-Sigma-based DiffSplat`:
+```bash
+python3 download_ckpt.py --model_type pas --image_cond
+```
+
+#### 1. Text-conditioned 3D Object Generation
+
+Note that:
+- Model differences may not be significant for simple text prompts. We recommend using `DiffSplat (SD1.5)` for better efficiency, `DiffSplat (SD3.5m)` for better performance, and `DiffSplat (PixArt-Sigma)` for a better trade-off.
+- By default, `export HF_HOME=~/.cache/huggingface`, `export TORCH_HOME=~/.cache/torch`. You can change these paths in `scripts/infer.sh`. SD3-related models require HuggingFace token for downloading, which is expected to be stored in `HF_HOME`.
+- Outputs will be stored in `./out/<MODEL_NAME>/inference`.
+- Prompt is specified by `--prompt` (e.g., `a_toy_robot`). Please seperate words by `_` and it will be replaced by space in the code automatically.
+- If `"gif"` is in `--output_video_type`, the output will be a `.gif` file. Otherwise, it will be a `.mp4` file. If `"fancy"` is in `--output_video_type`, the output video will be in a fancy style that 3DGS scales gradually increase while rotating.
+- `--seed` is used for random seed setting. `--gpu_id` is used for specifying the GPU device.
+- Use `--half_precision` for `BF16` half-precision inference. It will reduce the memory usage but may slightly affect the quality.
 
 ```bash
-conda create -n avatar python=3.10 -y
-conda activate avatar
-pip install -r requirements.txt
+# DiffSplat (SD1.5)
+bash scripts/infer.sh src/infer_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render \
+--prompt a_toy_robot --output_video_type gif \
+--gpu_id 0 --seed 0 [--half_precision]
+
+# DiffSplat (PixArt-Sigma)
+bash scripts/infer.sh src/infer_gsdiff_pas.py configs/gsdiff_pas.yaml gsdiff_gobj83k_pas_fp16__render \
+--prompt a_toy_robot --output_video_type gif \
+--gpu_id 0 --seed 0 [--half_precision]
+
+# DiffSplat (SD3.5m)
+bash scripts/infer.sh src/infer_gsdiff_sd3.py configs/gsdiff_sd35m_80g.yaml gsdiff_gobj83k_sd35m__render \
+--prompt a_toy_robot --output_video_type gif \
+--gpu_id 0 --seed 0 [--half_precision]
 ```
 
-### 3. Download Base Models
+You will get:
+| DiffSplat (SD1.5) | DiffSplat (PixArt-Sigma) | DiffSplat (SD3.5m) |
+|-------------------------|-------------------------------|-------------------------|
+| ![sd15_text](./assets/_demo/a_toy_robot/sd15.gif) | ![pas_text](./assets/_demo/a_toy_robot/pas.gif) | ![sd35m_text](./assets/_demo/a_toy_robot/sd35m.gif) |
 
-All base models are loaded from HuggingFace automatically on first run.  
-To pre-download manually:
+
+**More Advanced Arguments**:
+- `--prompt_file`: instead of using `--prompt`, `--prompt_file` will read prompts from a `.txt` file line by line.
+- Diffusion configurations:
+    - `--scheduler_type`: choose from `ddim`, `dpmsolver++`, `sde-dpmsolver++`, etc.
+    - `--num_inference_timesteps`: the number of diffusion steps.
+    - `--guidance_scale`: classifier-free guidance (CFG) scale; `1.0` means no CFG.
+    - `--eta`: specified for `DDIM` scheduler; the weight of noise for added noise in diffusion steps.
+- [Instant3D](https://instant-3d.github.io) tricks:
+    - `--init_std`, `--init_noise_strength`, `--init_bg`: initial noise settings, cf. [Instant3D Sec. 3.1](https://arxiv.org/pdf/2311.06214); NOT used by default, as we found it's not that helpful in our case.
+- Others:
+    - `--elevation`: elevation for viewing and rendering; not necessary for text-conditioned generation; set to `10` by default (from xz-plane (`0`) to +y axis (`90`)).
+    - `--negative_prompt`: empty prompt (`""`) by default; used with CFG for better visual quality (e.g., more vibrant colors), but we found it causes lower metric values (such as [ImageReward](https://github.com/THUDM/ImageReward)).
+    - `--save_ply`: save the generated 3DGS as a `.ply` file; used with `--opacity_threshold_ply` to filter out low-opacity splats for a much smaller `.ply` file size.
+    - `--eval_text_cond`: evaluate text-conditioned generation automatically.
+    - ...
+
+Please refer to [infer_gsdiff_sd.py](./src/infer_gsdiff_sd.py), [infer_gsdiff_pas.py](./src/infer_gsdiff_pas.py), and [infer_gsdiff_sd3.py](./src/infer_gsdiff_sd3.py) for more argument details.
+
+#### 2. Image-conditioned 3D Object Generation
+
+Note that:
+- Most of the arguments are the same as text-conditioned generation. Our method support **text and image as conditions simultaneously**.
+- Elevation is necessary for image-conditioned generation. You can specify the elevation angle by `--elevation` for viewing and rendering (from xz-plane (`0`) to +y axis (`90`)) or estimate it from the input image by `--use_elevest` (download the pretrained `ElevEst` model by `python3 download_ckpt.py --model_type elevest`) first. But we found that the **estimated elevation is not always accurate**, so it's better to set it manually.
+- Text prompt is **optional** for image-conditioned generation. If you want to use text prompt, you can specify it by `--prompt` (e.g., `a_frog`), otherwise, empty prompt (`""`) will be used. Note that **DiffSplat (SD3.5m)** is sensitive to text prompts, and it may generate bad results without a proper prompt.
+- Remember to set a smaller `--guidance_scale` for image-conditioned generation, as the default value is set for text-conditioned generation. `2.0` is recommended for most cases.
+- `--triangle_cfg_scaling` is a trick that set larger CFG values for far-away views from the input image, while smaller CFG values for close-up views, cf. [SV3D Sec. 3](https://arxiv.org/pdf/2403.12008).
+- `--rembg_and_center` will remove the background and center the object in the image. It can be used with `--rembg_model_name` (by default `u2net`) and `--border_ratio` (by default `0.2`).
+- Image-conditioned generation is more sensitive to arguments, and you may need to tune them for better results.
 
 ```bash
-# Stable Diffusion 1.5 (base model)
-huggingface-cli download runwayml/stable-diffusion-v1-5 \
-    --local-dir checkpoints/sd15
+# DiffSplat (SD1.5)
+bash scripts/infer.sh src/infer_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15_image__render \
+--rembg_and_center --triangle_cfg_scaling --output_video_type gif --guidance_scale 2 \
+--image_path assets/grm/frog.png --elevation 20 --prompt a_frog
 
-# IP-Adapter FaceID
-huggingface-cli download h94/IP-Adapter-FaceID \
-    ip-adapter-faceid_sd15.bin \
-    --local-dir checkpoints/ip_adapter
+# DiffSplat (PixArt-Sigma)
+bash scripts/infer.sh src/infer_gsdiff_pas.py configs/gsdiff_pas.yaml gsdiff_gobj83k_pas_fp16_image__render \
+--rembg_and_center --triangle_cfg_scaling --output_video_type gif --guidance_scale 2 \
+--image_path assets/grm/frog.png --elevation 20 --prompt a_frog
 
-# ControlNet OpenPose
-huggingface-cli download lllyasviel/control_v11p_sd15_openpose \
-    --local-dir checkpoints/controlnet
-
-# ArcFace (for identity loss and evaluation)
-huggingface-cli download deepinsight/insightface \
-    --local-dir checkpoints/arcface
+# DiffSplat (SD3.5m)
+bash scripts/infer.sh src/infer_gsdiff_sd3.py configs/gsdiff_sd35m_80g.yaml gsdiff_gobj83k_sd35m_image__render \
+--rembg_and_center --triangle_cfg_scaling --output_video_type gif --guidance_scale 2 \
+--image_path assets/grm/frog.png --elevation 20 --prompt a_frog
 ```
 
-### 4. Prepare Training Data
-Place designer-provided style images in `data/raw/`, then run preprocessing:
+You will get:
+| Arguments | DiffSplat (SD1.5) | DiffSplat (PixArt-Sigma) | DiffSplat (SD3.5m) |
+|---------|-------------------------|-------------------------------|-------------------------|
+| `--elevation 20 --prompt a_frog` | ![sd15_image](./assets/_demo/a_frog/sd15.gif) | ![pas_image](./assets/_demo/a_frog/pas.gif) | ![sd35m_image](./assets/_demo/a_frog/sd35m.gif) |
+| `--use_elevest --prompt a_frog` (estimated elevation: -0.78 deg) | ![sd15_image](./assets/_demo/a_frog_elevest/sd15.gif) | ![pas_image](./assets/_demo/a_frog_elevest/pas.gif) | ![sd35m_image](./assets/_demo/a_frog_elevest/sd35m.gif) |
+| `--elevation 20` (prompt is `""`) | ![sd15_image](./assets/_demo/a_frog_empty/sd15.gif) | ![pas_image](./assets/_demo/a_frog_empty/pas.gif) | ![sd35m_image](./assets/_demo/a_frog_empty/sd35m.gif) |
+
+**More Advanced Arguments**:
+- `--image_dir`: instead of using `--image_path`, `--image_dir` will read images from a directory.
+
+Please refer to [infer_gsdiff_sd.py](./src/infer_gsdiff_sd.py), [infer_gsdiff_pas.py](./src/infer_gsdiff_pas.py), and [infer_gsdiff_sd3.py](./src/infer_gsdiff_sd3.py) for more argument details.
+
+#### 3. ControlNet for 3D Object Generation
+
+Note that:
+- After downloading pretrained **DiffSplat (SD1.5)**, you shoule download the controlnet weights by `python3 download_ckpt.py --model_type [depth | normal | canny]`.
+- For **depth-controlnet**, values in depth maps are normalized to `[0, 1]` and larger values (white) mean closer to the camera (smaller depth). Please refer to [GObjaverse Dataset](./src/data/gobjaverse_parquet_dataset.py) for more details.
+- For **normal-controlnet**, input camera is normalized to locate at `(0, 0, 1.4)` and look at `(0, 0, 0)`, thus the input normal maps are transformed accordingly. Please refer to [GObjaverse Dataset](./src/data/gobjaverse_parquet_dataset.py) for more details.
+- For **canny-controlnet**, canny edges are extracted from the input RGB images automatically by `cv2.Canny`. Please refer to [GObjaverse Dataset](./src/data/gobjaverse_parquet_dataset.py) for more details.
 
 ```bash
-python data/preprocess.py \
-    --input_dir data/raw/ \
-    --output_dir data/processed/ \
-    --size 512
+# ControlNet (depth)
+bash scripts/infer.sh src/infer_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render \
+--load_pretrained_controlnet gsdiff_gobj83k_sd15__render__depth \
+--output_video_type gif --image_path assets/diffsplat/controlnet/toy_depth.png \
+--prompt teddy_bear --elevation 10
+
+# ControlNet (normal)
+bash scripts/infer.sh src/infer_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render \
+--load_pretrained_controlnet gsdiff_gobj83k_sd15__render__normal \
+--output_video_type gif --image_path assets/diffsplat/controlnet/robot_normal.png \
+--prompt iron_robot --elevation 10
+
+# ControlNet (canny)
+bash scripts/infer.sh src/infer_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render \
+--load_pretrained_controlnet gsdiff_gobj83k_sd15__render__canny \
+--output_video_type gif --image_path assets/diffsplat/controlnet/cookie_canny.png \
+--prompt book --elevation 10
 ```
 
-Place generic illustration images for prior preservation in `data/class_images/`.
+You will get:
+| Original Image | Input Control | `--prompt teddy_bear` | `--prompt panda` |
+|----------------|---------------|-----------------------|--------------------|
+| ![depth_image](./assets/diffsplat/controlnet/toy_image.png) | ![depth](./assets/diffsplat/controlnet/toy_depth.png) | ![controlnet_1](assets/_demo/controlnet/teddy_bear.gif) | ![controlnet_2](assets/_demo/controlnet/panda.gif) |
 
-### 5. Prepare Body Templates
+| Original Image | Input Control | `--prompt iron_robot` | `--prompt plush_dog_toy` |
+|----------------|---------------|-----------------------|--------------------|
+| ![normal_image](./assets/diffsplat/controlnet/robot_image.png) | ![normal](./assets/diffsplat/controlnet/robot_normal.png) | ![controlnet_1](assets/_demo/controlnet/iron_robot.gif) | ![controlnet_2](assets/_demo/controlnet/plush_dog_toy.gif) |
 
-Place designer-provided template images in `data/template/previews/`,  
-then pre-extract OpenPose skeletons:
+| Original Image | Input Control | `--prompt book` | `--prompt cookie` |
+|----------------|---------------|-----------------|---------------------|
+| ![canny_image](./assets/diffsplat/controlnet/cookie_image.png) | ![canny](./assets/diffsplat/controlnet/cookie_canny.png) | ![controlnet_1](assets/_demo/controlnet/book.gif) | ![controlnet_2](assets/_demo/controlnet/cookie.gif) |
 
+**More Advanced Arguments**:
+- `--guess_mode`: ControlNet encoder tries to recognize the content of the input image even if you remove all prompts, cf. [the original ControlNet repo](https://github.com/lllyasviel/ControlNet#guess-mode--non-prompt-mode) and [HF ControlNet](https://huggingface.co/docs/diffusers/using-diffusers/controlnet#guess-mode).
+- `--controlnet_scale`: determines how much weight to assign to the conditioning inputs; outputs of the ControlNet are multiplied by `controlnet_scale` before they are added to the residual in the original UNet.
+
+Please refer to [infer_gsdiff_sd.py](./src/infer_gsdiff_sd.py) for more argument details.
+
+
+### 🦾 Training
+
+#### 0. Project Overview
+
+##### 0.1 `extensions/diffusers_diffsplat`
+We manually modified the latest `diffusers` library (`diffusers==0.32`) and tried to comment in detail on codes to clarify modifications. The folder structure is the same as the original repo.
+
+Generally:
+- Modifications in `diffusers_diffsplat/models` are most for (1) "multi-view attention" that gets inputs in `(B*V, N, D)` then operates the attention operation in `(B, V*N, D)`, (2) a new function `from_pretrained_new()` for UNet and Transformer that initializes models with different input channels, e.g., 4 (SD latent) in the original Stable Diffusion, while 10 or 11 (RGB + plucker + (optional) binary mask) for our DiffSplat.
+- `diffusers_diffsplat/pipelines` are implemented for each base model in `diffusers_diffsplat/models` accordingly with some fancy functions (such as Instant3D-style noise initialization), which are however not really used.
+- `diffusers_diffsplat/schedulers` are only for `DPM-Solver++ flow matching scheduler`, which is copied from [the diffusers PR](https://github.com/huggingface/diffusers/pull/9982) and not really used.
+- `diffusers_diffsplat/training_utils.py` is only for `EMAModel` that can really set `self.use_ema_warmup` as described in [the diffusers PR](https://github.com/huggingface/diffusers/pull/9812).
+
+##### 0.2 `src/data/gobjaverse_parquet_dataset.py`
+
+We preprocess the original GObjaverse dataset and store it in a parquet format for efficient dataloading from an internal HDFS. The parquet format is NOT necessary, and you can implement your own dataloading logic.
+
+Here is our preprocessing script for your reference:
+```python
+# Code snippet for GObjaverse dataset preprocessing; NOT runnable
+# ...
+
+outputs = {
+    "__key__": objaverse_id,
+    "uid": objaverse_id.encode("utf-8"),
+}
+
+dir_id, object_id = item.split("/")
+object_dir = os.path.join(SAVE_DIR, dir_id, object_id, "campos_512_v4")
+
+for i in range(40):  # hard-coded `40` views
+    view_dir = os.path.join(object_dir, f"{i:05}")
+    image_path = os.path.join(view_dir, f"{i:05}.png")
+    albedo_path = os.path.join(view_dir, f"{i:05}_albedo.png")
+    mr_path = os.path.join(view_dir, f"{i:05}_mr.png")
+    nd_path = os.path.join(view_dir, f"{i:05}_nd.exr")
+    transform_path = os.path.join(view_dir, f"{i:05}.json")
+
+    # Use `tf.io.encode_png` to encode images to compact bytes
+    try:
+        outputs[f"{i:05}.png"] = tf.io.encode_png(tf.convert_to_tensor(imageio.imread(image_path), tf.uint8)).numpy()
+        outputs[f"{i:05}_albedo.png"] = tf.io.encode_png(tf.convert_to_tensor(imageio.imread(albedo_path)[:, :, :3], tf.uint8)).numpy()
+        outputs[f"{i:05}_mr.png"] = tf.io.encode_png(tf.convert_to_tensor(imageio.imread(mr_path)[:, :, :3], tf.uint8)).numpy()
+        nd = cv2.imread(nd_path, cv2.IMREAD_UNCHANGED)
+        nd[:, :, :3] = nd[:, :, :3][..., ::-1]  # BGR -> RGB
+        nd[:, :, :3] = (nd[:, :, :3] * 0.5 + 0.5) * 65535  # [-1., 1.] -> [0, 65535]
+        nd[:, :, 3] = nd[:, :, 3] / 5. * 65535  # scale the depth by 1/5, then it must be in [0, 1]; [0., +?) -> [0, 65535]
+        outputs[f"{i:05}_nd.png"] = tf.io.encode_png(tf.convert_to_tensor(nd, tf.uint16)).numpy()
+        with open(transform_path, "r") as f:
+            outputs[f"{i:05}.json"] = f.read().encode("utf-8")
+
+        if outputs[f"{i:05}.png"] is None or outputs[f"{i:05}_albedo.png"] is None or \
+            outputs[f"{i:05}_mr.png"] is None or outputs[f"{i:05}_nd.png"] is None or \
+            outputs[f"{i:05}.json"] is None:
+            continue  # ignore broken files
+    except:
+        continue  # ignore broken files
+
+    # Then `outputs: Dict[str, bytes]` is stored in a parquet file
+    # ...
+```
+
+#### 1. GSRecon
+
+Set environment variables in `scripts/train.sh` first, then:
 ```bash
-python inference/controlnet_utils.py \
-    --input_dir data/template/previews/ \
-    --output_dir data/template/poses/
+bash scripts/train.sh src/train_gsrecon.py configs/gsrecon.yaml gsrecon_gobj265k_cnp_even4
 ```
 
-### 6. Verify Setup
+Please refer to [train_gsrecon.py](./src/train_gsrecon.py) and options are specified in [configs/gsrecon.yaml](./configs/gsrecon.yaml) and [options.py](./src/options.py) (`opt_dict["gsrecon"]`).
 
+Please refer to [issues#12](https://github.com/chenguolin/DiffSplat/issues/12) to infer `GSRecon` with multi-view (4 views) RGB, normal, and coordinate maps.
+
+#### 2. GSVAE
+
+##### 2.1 Regular GSVAE
+
+Set environment variables in `scripts/train.sh` first, then:
 ```bash
-python -c "
-import torch
-print('PyTorch:', torch.__version__)
-print('CUDA available:', torch.cuda.is_available())
-print('CUDA device:', torch.cuda.get_device_name(0))
-"
+# SD1.5 / SD2.1 / PixArt-alpha
+bash scripts/train.sh src/train_gsvae.py configs/gsvae.yaml gsvae_gobj265k_sd opt_type=gsvae --gradient_accumulation_steps 4
+
+# SDXL (fp16-fixed) / PixArt-Sigma
+bash scripts/train.sh src/train_gsvae.py configs/gsvae.yaml gsvae_gobj265k_sdxl_fp16 opt_type=gsvae_sdxl_fp16 --gradient_accumulation_steps 4
+
+# SD3 / SD3.5
+bash scripts/train.sh src/train_gsvae.py configs/gsvae.yaml gsvae_gobj265k_sd3 opt_type=gsvae_sd35m --gradient_accumulation_steps 4
 ```
 
-Expected output:
-```
-PyTorch: 2.6.0
-CUDA available: True
-CUDA device: NVIDIA GeForce RTX XXXX
-```
+##### 2.2 Tiny GSVAE Decoder
 
+For efficient performing rendering loss in the DiffSplat training stage, we train **tiny decoders** (use pretrained tiny AEs at [here](https://huggingface.co/madebyollin)) with much smaller sizes than the original decoders.
+Note that:
+- Tiny GSVAE decoders are only used in DiffSplat rendering loss, not for the final inference.
+- `opt.freeze_encoder=true`: encoder part of the pretrained GSVAE is fixed.
+- `opt.use_tiny_decoder=true`: use tiny decoder in this stage.
+- `--load_pretrained_model`: load pretrained GSVAE models in the previous stage.
 
-## 5 Usage
-   - Training (run order: dreambooth_lora.py first, then identity_loss.py, 
-     textual_inversion.py can run in parallel)
-   - Inference (python inference/pipeline.py --photo your_photo.jpg --template female_casual)
-   - Evaluation (python evaluation/eval_identity.py)
-   - Frontend (uvicorn frontend/app.py)
-
-## 6 Training Data
-
-测试可以拿
-A类：Stylebreeder https://huggingface.co/datasets/stylebreeder/stylebreeder
-Danbooru SFW 512px Character Filter  https://huggingface.co/datasets/hayden-donnelly/db-sfw-512px-character-filter
-B类：Stable Diffusion Regularization Images	  https://github.com/Distraict/Stable-Diffusion-Regularization-Images
-
-The training pipeline requires two categories of images:
-### Category A — Style Images (`data/raw/`)
-
-Used to teach the model the target illustration style.  
-These images are provided by the designer and define the brand's visual identity.
-
-**Requirements:**
-- 50–100 images
-- All in the target illustration style
-- Diverse characters (different faces, hair, gender) — do not use the same 
-  character repeatedly
-- Front-facing or three-quarter view preferred
-- Clean or simple background
-- Preprocessed to 512×512
-
-**Content:** Character illustrations are recommended, as the inference target 
-is a human avatar. However, any image that clearly exhibits the target style 
-(scenes, props) is acceptable.
-
-```
-data/raw/
-├── char_001.png
-├── char_002.png
-├── char_003.png
-├── ...
-└── char_080.png         # 50–100 images total, diverse characters, unified style
-```
-
----
-
-### Category B — Class Images (`data/class_images/`)
-
-Used as prior preservation data during DreamBooth training to prevent the 
-model from forgetting general illustration ability (catastrophic forgetting).  
-These images do not need to match the target style — diversity is preferred.
-
-**Requirements:**
-- 100–200 images
-- Any illustration or photographic content is acceptable
-- Must NOT be in the target style
-- No quality or composition constraints
-
-**Sources:** Publicly available datasets (e.g., Danbooru, Pinterest) or 
-any generic anime/illustration collection.
-
-```
-data/class_images/
-├── generic_001.png
-├── generic_002.png
-├── generic_003.png
-├── ...
-└── generic_150.png      # 100–200 images, diverse styles and content
-```
-## 7 Model weights (note that checkpoints/ is gitignored, provide HuggingFace links placeholder)
-### Base Models (Auto-downloaded from HuggingFace)
-
-The following pretrained models are required and will be downloaded 
-automatically on first run. To pre-download manually, see Setup Instructions.
-
-| Model | HuggingFace Link | Used In |
-|-------|-----------------|---------|
-| Stable Diffusion 1.5 | [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5) | All training modules + inference |
-| IP-Adapter FaceID | [h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID) | Inference: identity conditioning |
-| ControlNet OpenPose | [lllyasviel/control_v11p_sd15_openpose](https://huggingface.co/lllyasviel/control_v11p_sd15_openpose) | Inference: structure conditioning |
-| ArcFace (InsightFace) | [deepinsight/insightface](https://huggingface.co/deepinsight/insightface) | Module 3 training + evaluation |
-
----
-
-### Trained Checkpoints (gitignored)
-
-Checkpoints produced by our three training modules are stored in 
-`checkpoints/` and are not tracked by git.
-
-```
-checkpoints/
-├── sd15/                      # Base model cache
-├── ip_adapter/                # IP-Adapter FaceID weights
-├── controlnet/                # ControlNet OpenPose weights
-├── arcface/                   # ArcFace weights
-│
-├── style_token.pt             # Output of Module 1 (Textual Inversion)
-├── style_lora.safetensors     # Output of Module 2 (DreamBooth + LoRA)
-└── style_id_lora.safetensors  # Output of Module 3 (Identity-Guided Fine-tuning)
-```
-
-To reproduce our results, run the three training modules in order:
-
+Set environment variables in `scripts/train.sh` first, then:
 ```bash
-# Module 1 and 2 can run in parallel
-python training/textual_inversion.py    # → style_token.pt
-python training/dreambooth_lora.py      # → style_lora.safetensors
+# Tiny SD1.5 / SD2.1 / PixArt-alpha decoder
+bash scripts/train.sh src/train_gsvae.py configs/gsvae.yaml gsvae_gobj265k_sd opt_type=gsvae train.batch_size_per_gpu=8 opt.freeze_encoder=true opt.use_tiny_decoder=true --load_pretrained_model gsvae_gobj265k_sd
 
-# Module 3 depends on Module 2 output
-python training/identity_loss.py        # → style_id_lora.safetensors
+# Tiny SDXL (fp16-fixed) / PixArt-Sigma decoder
+bash scripts/train.sh src/train_gsvae.py configs/gsvae.yaml gsvae_gobj265k_sdxl_fp16 opt_type=gsvae_sdxl_fp16 train.batch_size_per_gpu=8 opt.freeze_encoder=true opt.use_tiny_decoder=true --load_pretrained_model gsvae_gobj265k_sdxl_fp16
+
+# Tiny SD3 / SD3.5 decoder
+bash scripts/train.sh src/train_gsvae.py configs/gsvae.yaml gsvae_gobj265k_sd3 opt_type=gsvae_sd35m train.batch_size_per_gpu=8 opt.freeze_encoder=true opt.use_tiny_decoder=true --load_pretrained_model gsvae_gobj265k_sd3
 ```
 
-> **Note:** Pre-trained checkpoints for our Laukry-style demo will be 
-> released on HuggingFace after the course concludes.  
-> 🔗 Link: `[to be released]`
+Please refer to [train_gsvae.py](./src/train_gsvae.py) and options are specified in [configs/gsvae.yaml](./configs/gsvae.yaml) and [options.py](./src/options.py) (`opt_dict["gsvae"]`, `opt_dict["gsvae_sdxl_fp16"]` and `opt_dict["gsvae_sd35m"]`).
+
+#### 3. DiffSplat
+
+##### 3.0 Text Embedding Precomputation
+
+Text embeddings for captions are precomputed by [extensions/encode_prompt_embeds.py](./extensions/encode_prompt_embeds.py):
+```bash
+python3 extensions/encode_prompt_embeds.py [MODEL_NAME] [--batch_size 128] [--dataset_name gobj83k]
+
+# `MODEL_NAME`: choose from "sd15", "sd21", "sdxl", "paa", "pas", "sd3m", "sd35m", "sd35l"
+```
+Captions will download automatically in `extensions/assets` and text embeddings are stored in `/tmp/{DATASET_NAME}_{MODEL_NAME}_prompt_embeds` by default.
+
+##### 3.1 DiffSplat (w/o rendering loss)
+Note that:
+- `opt.view_concat_condition=true opt.input_concat_binary_mask=true`: specified for image-conditioned generation.
+- `opt.prediction_type=v_prediction`: specified for image-conditioned generation. We use `v_prediction` for better image-conditioned performance.
+- `----val_guidance_scales 1 2 3` (default: `1 3 7.5`): smaller CFG scales for image conditioning.
+
+Set environment variables in `scripts/train.sh` first, then:
+```bash
+# SD1.5 (text-cond)
+bash scripts/train.sh src/train_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15 --gradient_accumulation_steps 2 --use_ema
+# SD1.5 (image-cond)
+bash scripts/train.sh src/train_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15 --gradient_accumulation_steps 2 --use_ema ----val_guidance_scales 1 2 3 opt.view_concat_condition=true opt.input_concat_binary_mask=true opt.prediction_type=v_prediction
+
+# PixArt-Sigma (text-cond)
+bash scripts/train.sh src/train_gsdiff_pas.py configs/gsdiff_pas.yaml gsdiff_gobj83k_pas_fp16 --gradient_accumulation_steps 2 --use_ema
+# PixArt-Sigma (image-cond)
+bash scripts/train.sh src/train_gsdiff_pas.py configs/gsdiff_pas.yaml gsdiff_gobj83k_pas_fp16 --gradient_accumulation_steps 2 --use_ema ----val_guidance_scales 1 2 3 opt.view_concat_condition=true opt.input_concat_binary_mask=true opt.prediction_type=v_prediction
+
+# SD3.5m (text-cond)
+bash scripts/train.sh src/train_gsdiff_sd3.py configs/gsdiff_sd35m_80g.yaml gsdiff_gobj83k_sd35m --gradient_accumulation_steps 8 --use_ema
+# SD3.5m (image-cond)
+bash scripts/train.sh src/train_gsdiff_sd3.py configs/gsdiff_sd35m_80g.yaml gsdiff_gobj83k_sd35m --gradient_accumulation_steps 8 --use_ema ----val_guidance_scales 1 2 3 opt.view_concat_condition=true opt.input_concat_binary_mask=true opt.prediction_type=v_prediction
 ```
 
-## 8 Team
-   - A: Identity Loss module + Evaluation pipeline
-   - B: Textual Inversion training
-   - C: DreamBooth + LoRA training
-## 9 References (4 papers: SD1.5, Textual Inversion, DreamBooth, ControlNet, 
-   IP-Adapter, ArcFace)
+##### 3.2 DiffSplat (w/ rendering loss)
+Note that:
+- `opt.rendering_loss_prob=1` (default `0`) means use rendering loss in the training stage all the time.
+- `opt.snr_gamma_rendering=1`: we use SNR (signal-noise ratio) weighted rendering loss (weight `gamma=1`) for PixArt-Sigma models for more robust training. Feel free to tune this weight for other models.
+- `opt.use_tiny_decoder=true`: use tiny decoder for efficient decoding/rendering in this stage.
+- `--load_pretrained_model` is used for loading pretrained DiffSplat models in the previous stage.
+
+Set environment variables in `scripts/train.sh` first, then:
+```bash
+# SD1.5 (text-cond)
+bash scripts/train.sh src/train_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render --gradient_accumulation_steps 2 --use_ema opt.rendering_loss_prob=1 opt.use_tiny_decoder=true --load_pretrained_model gsdiff_gobj83k_sd15
+# SD1.5 (image-cond)
+bash scripts/train.sh src/train_gsdiff_sd.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15_image__render --gradient_accumulation_steps 2 --use_ema ----val_guidance_scales 1 2 3 opt.view_concat_condition=true opt.input_concat_binary_mask=true opt.prediction_type=v_prediction opt.rendering_loss_prob=1 opt.use_tiny_decoder=true --load_pretrained_model gsdiff_gobj83k_sd15
+
+# PixArt-Sigma (text-cond)
+bash scripts/train.sh src/train_gsdiff_pas.py configs/gsdiff_pas.yaml gsdiff_gobj83k_pas_fp16__render --gradient_accumulation_steps 2 --use_ema opt.rendering_loss_prob=1 opt.snr_gamma_rendering=1 opt.use_tiny_decoder=true --load_pretrained_model gsdiff_gobj83k_pas_fp16
+# PixArt-Sigma (image-cond)
+bash scripts/train.sh src/train_gsdiff_pas.py configs/gsdiff_pas.yaml gsdiff_gobj83k_pas_fp16_image__render --gradient_accumulation_steps 2 --use_ema ----val_guidance_scales 1 2 3 opt.view_concat_condition=true opt.input_concat_binary_mask=true opt.prediction_type=v_prediction opt.rendering_loss_prob=1 opt.snr_gamma_rendering=1 opt.use_tiny_decoder=true --load_pretrained_model gsdiff_gobj83k_pas_fp16
+
+# SD3.5m (text-cond)
+bash scripts/train.sh src/train_gsdiff_sd3.py configs/gsdiff_sd35m_80g.yaml gsdiff_gobj83k_sd35m__render --gradient_accumulation_steps 8 --use_ema opt.rendering_loss_prob=1 opt.use_tiny_decoder=true --load_pretrained_model gsdiff_gobj83k_sd35m
+# SD3.5m (image-cond)
+bash scripts/train.sh src/train_gsdiff_sd3.py configs/gsdiff_sd35m_80g.yaml gsdiff_gobj83k_sd35m_image__render --gradient_accumulation_steps 8 --use_ema ----val_guidance_scales 1 2 3 opt.view_concat_condition=true opt.input_concat_binary_mask=true opt.prediction_type=v_prediction opt.rendering_loss_prob=1 opt.use_tiny_decoder=true --load_pretrained_model gsdiff_gobj83k_sd35m
+```
+
+Please refer to [train_gsdiff_{sd, sdxl, paa, pas, sd3}.py](./src/train_gsdiff_sd.py) and options are specified in [configs/gsdiff_{sd, sdxl_80g, paa,pas, sd3m_80g, sd35m_80g}.yaml](./configs/gsdiff_sd15.yaml) and [options.py](./src/options.py) (`opt_dict["gsdiff_sd15"]`, `opt_dict["gsdiff_sdxl"]`, `opt_dict["gsdiff_paa"]`, `opt_dict["gsdiff_pas"]`, `opt_dict["gsdiff_sd3m"]` and `opt_dict["gsdiff_sd35m"]`).
+
+#### 4. ControlNet
+Note that:
+- `opt.controlnet_type`: choose from `[normal, canny, depth]`.
+- `--load_pretrained_model` is used for loading pretrained DiffSplat models in the previous stage.
+
+Set environment variables in `scripts/train.sh` first, then:
+```bash
+# Normal ControlNet
+bash scripts/train.sh src/train_gsdiff_sd_controlnet.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render__normal --gradient_accumulation_steps 2 opt.controlnet_type=normal --load_pretrained_model gsdiff_gobj83k_sd15__render
+
+# Canny ControlNet
+bash scripts/train.sh src/train_gsdiff_sd_controlnet.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render__canny --gradient_accumulation_steps 2 opt.controlnet_type=canny --load_pretrained_model gsdiff_gobj83k_sd15__render
+
+# Depth ControlNet
+bash scripts/train.sh src/train_gsdiff_sd_controlnet.py configs/gsdiff_sd15.yaml gsdiff_gobj83k_sd15__render__depth --gradient_accumulation_steps 2 opt.controlnet_type=depth --load_pretrained_model gsdiff_gobj83k_sd15__render
+```
+
+Please refer to [train_gsdiff_{sd, sdxl}_controlnet.py](./src/train_gsdiff_sd_controlnet.py) and options are in [configs/gsdiff_{sd15, sdxl}_controlnet.yaml](./configs/gsdiff_sd15_controlnet.yaml) and [options.py](./src/options.py) (`opt_dict["gsdiff_sd15"]` and `opt_dict["gsdiff_sdxl"]`).
+
+
+## 😊 Acknowledgement
+We would like to thank the authors of [LGM](https://me.kiui.moe/lgm), [GRM](https://justimyhxu.github.io/projects/grm), and [Wonder3D](https://www.xxlong.site/Wonder3D) for their great work and generously providing source codes, which inspired our work and helped us a lot in the implementation.
+
+
+## 📚 Citation
+If you find our work helpful, please consider citing:
+```bibtex
+@inproceedings{lin2025diffsplat,
+  title={DiffSplat: Repurposing Image Diffusion Models for Scalable 3D Gaussian Splat Generation},
+  author={Lin, Chenguo and Pan, Panwang and Yang, Bangbang and Li, Zeming and Mu, Yadong},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2025}
+}
+```
