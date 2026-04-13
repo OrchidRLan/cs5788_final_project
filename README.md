@@ -238,7 +238,7 @@ CUDA device: NVIDIA GeForce RTX XXXX
 ```
 
 
-5. Usage
+## 5 Usage
    - Training (run order: dreambooth_lora.py first, then identity_loss.py, 
      textual_inversion.py can run in parallel)
    - Inference (python inference/pipeline.py --photo your_photo.jpg --template female_casual)
@@ -305,11 +305,7 @@ data/class_images/
 ├── ...
 └── generic_150.png      # 100–200 images, diverse styles and content
 ```
-## 7 Model weights (note that checkpoints/ is gitignored, provide HuggingFace 
-   links placeholder)
-
-   ```markdown
-
+## 7 Model weights (note that checkpoints/ is gitignored, provide HuggingFace links placeholder)
 ### Base Models (Auto-downloaded from HuggingFace)
 
 The following pretrained models are required and will be downloaded 
